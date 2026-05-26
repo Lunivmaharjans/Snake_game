@@ -14,6 +14,7 @@ BACKGROUND_COLOR = "black"
 SPEED = 100
 
 score = 0
+last_direction = "right"
 high_score = 0
 
 # ---------------- WINDOW ----------------
@@ -111,6 +112,7 @@ def restart_game():
     global snake, food, score
 
     score = 0
+
     canvas.delete("all")
 
     snake = Snake()
@@ -122,11 +124,20 @@ def restart_game():
 # ---------------- MAIN LOOP ----------------
 
 def next_turn(snake, food):
-    global score, high_score
+    global score, high_score, last_direction
 
     # AI decision
     state = ai.get_state(snake, food)
     direction = ai.get_ai_direction(state)
+    opposite = {
+    "up": "down",
+    "down": "up",
+    "left": "right",
+    "right": "left"
+}
+
+    if direction == opposite.get(last_direction, ""):
+        direction = last_direction
 
     x, y = snake.coordinates[0]
 
@@ -138,6 +149,8 @@ def next_turn(snake, food):
         x -= SPACE_SIZE
     elif direction == "right":
         x += SPACE_SIZE
+
+    last_direction = direction 
 
     # new head
     snake.coordinates.insert(0, [x, y])
@@ -156,6 +169,7 @@ def next_turn(snake, food):
     if x == food.coordinates[0] and y == food.coordinates[1]:
         score += 1
         reward = ai.calculate_reward("eat")
+        print("Reward:", reward)
 
         if score > high_score:
             high_score = score
@@ -166,6 +180,8 @@ def next_turn(snake, food):
         food = Food()
 
     else:
+        reward = 0
+        print("reward:", reward)
         # remove tail
         del snake.coordinates[-1]
         canvas.delete(snake.squares[-1])
@@ -177,6 +193,7 @@ def next_turn(snake, food):
 
     if collision:
         reward = ai.calculate_reward(collision)
+        print("Reward:", reward)
 
         ai.update_q_table(state, direction, reward, next_state)
         ai.save_qtable()
