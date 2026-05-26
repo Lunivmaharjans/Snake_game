@@ -1,92 +1,67 @@
 import tkinter as tk
 import random
+import ai
 
-# Game settings
+# ---------------- GAME SETTINGS ----------------
+
 WIDTH = 600
 HEIGHT = 400
 SPACE_SIZE = 20
 BODY_PARTS = 3
-SNAKE_COLOR = "green"
+SNAKE_COLOR = "white"
 FOOD_COLOR = "red"
 BACKGROUND_COLOR = "black"
 SPEED = 100
 
-# Create window
-window = tk.Tk()
-window.title("Snake Game")
-window.resizable(False, False)
-
 score = 0
 high_score = 0
 
-direction = 'down'
+# ---------------- WINDOW ----------------
 
-# Score label
-label = tk.Label(
-    window,
-    text="Score: 0    High Score: 0",
-    font=('Arial', 20)
-)
+window = tk.Tk()
+window.title("Snake AI Game")
+window.resizable(False, False)
 
+label = tk.Label(window, text="Score: 0    High Score: 0", font=('Arial', 20))
 label.pack()
 
-# Canvas
-canvas = tk.Canvas(
-    window,
-    bg=BACKGROUND_COLOR,
-    height=HEIGHT,
-    width=WIDTH
-)
-
+canvas = tk.Canvas(window, bg=BACKGROUND_COLOR, height=HEIGHT, width=WIDTH)
 canvas.pack()
 
 
-# Snake body
+# ---------------- SNAKE ----------------
+
 class Snake:
-
     def __init__(self):
-
-        self.body_size = BODY_PARTS
         self.coordinates = []
         self.squares = []
 
-        for i in range(0, BODY_PARTS):
-            self.coordinates.append([0, 0])
+        # FIX: prevent overlapping body (IMPORTANT FIX)
+        for i in range(BODY_PARTS):
+            self.coordinates.append([100 - i * SPACE_SIZE, 100])
 
         for x, y in self.coordinates:
-
             square = canvas.create_rectangle(
-                x,
-                y,
-                x + SPACE_SIZE,
-                y + SPACE_SIZE,
-                fill=SNAKE_COLOR,
-                tag="snake"
+                x, y, x + SPACE_SIZE, y + SPACE_SIZE,
+                fill=SNAKE_COLOR
             )
-
             self.squares.append(square)
 
 
-# Food body
+# ---------------- FOOD ----------------
+
 class Food:
-
     def __init__(self):
+        self.spawn()
 
-        x = random.randint(
-            0,
-            (WIDTH // SPACE_SIZE) - 1
-        ) * SPACE_SIZE
-
-        y = random.randint(
-            0,
-            (HEIGHT // SPACE_SIZE) - 1
-        ) * SPACE_SIZE
+    def spawn(self):
+        x = random.randint(0, (WIDTH // SPACE_SIZE) - 1) * SPACE_SIZE
+        y = random.randint(0, (HEIGHT // SPACE_SIZE) - 1) * SPACE_SIZE
 
         self.coordinates = [x, y]
 
         canvas.create_oval(
-            x,
-            y,
+            x, y,
             x + SPACE_SIZE,
             y + SPACE_SIZE,
             fill=FOOD_COLOR,
@@ -94,202 +69,132 @@ class Food:
         )
 
 
-# Snake Turn
-def next_turn(snake, food):
+# ---------------- COLLISION ----------------
 
-    global score
-    global high_score
+def check_collisions(snake):
+    x, y = snake.coordinates[0]
+
+    if x < 0 or x >= WIDTH:
+        return "wall"
+    if y < 0 or y >= HEIGHT:
+        return "wall"
+
+    for part in snake.coordinates[1:]:
+        if [x, y] == part:
+            return "self"
+
+    return None
+
+
+# ---------------- GAME OVER ----------------
+
+def game_over():
+    global snake, food, score
+
+    score = 0
+    canvas.delete("all")
+
+    canvas.create_text(
+        WIDTH / 2,
+        HEIGHT / 2,
+        text="GAME OVER",
+        fill="red",
+        font=("Arial", 30)
+    )
+
+    window.after(1500, restart_game)
+
+
+# ---------------- RESTART ----------------
+
+def restart_game():
+    global snake, food, score
+
+    score = 0
+    canvas.delete("all")
+
+    snake = Snake()
+    food = Food()
+
+    next_turn(snake, food)
+
+
+# ---------------- MAIN LOOP ----------------
+
+def next_turn(snake, food):
+    global score, high_score
+
+    # AI decision
+    state = ai.get_state(snake, food)
+    direction = ai.get_ai_direction(state)
 
     x, y = snake.coordinates[0]
 
     if direction == "up":
         y -= SPACE_SIZE
-
     elif direction == "down":
         y += SPACE_SIZE
-
     elif direction == "left":
         x -= SPACE_SIZE
-
     elif direction == "right":
         x += SPACE_SIZE
 
-    snake.coordinates.insert(0, (x, y))
+    # new head
+    snake.coordinates.insert(0, [x, y])
 
     square = canvas.create_rectangle(
-        x,
-        y,
+        x, y,
         x + SPACE_SIZE,
         y + SPACE_SIZE,
         fill=SNAKE_COLOR
     )
-
     snake.squares.insert(0, square)
 
-    # Eating food
+    reward = 0
+
+    # ---------------- FOOD CHECK ----------------
     if x == food.coordinates[0] and y == food.coordinates[1]:
-
         score += 1
+        reward = ai.calculate_reward("eat")
 
-        # Update high score
         if score > high_score:
             high_score = score
 
-        label.config(
-            text=f"Score: {score}    High Score: {high_score}"
-        )
+        label.config(text=f"Score: {score}    High Score: {high_score}")
 
         canvas.delete("food")
-
         food = Food()
 
     else:
-
+        # remove tail
         del snake.coordinates[-1]
-
         canvas.delete(snake.squares[-1])
-
         del snake.squares[-1]
 
-    # Check collision
-    if check_collisions(snake):
+    # ---------------- COLLISION ----------------
+    collision = check_collisions(snake)
+    next_state = ai.get_state(snake, food)
+
+    if collision:
+        reward = ai.calculate_reward(collision)
+
+        ai.update_q_table(state, direction, reward, next_state)
+        ai.save_qtable()
 
         game_over()
+        return
 
     else:
+        ai.update_q_table(state, direction, reward, next_state)
+        ai.save_qtable()
 
-        window.after(
-            SPEED,
-            next_turn,
-            snake,
-            food
-        )
+        window.after(SPEED, next_turn, snake, food)
 
 
-# Changing Direction
-def change_direction(new_direction):
+# ---------------- START GAME ----------------
 
-    global direction
-
-    if new_direction == 'left':
-
-        if direction != 'right':
-            direction = new_direction
-
-    elif new_direction == 'right':
-
-        if direction != 'left':
-            direction = new_direction
-
-    elif new_direction == 'up':
-
-        if direction != 'down':
-            direction = new_direction
-
-    elif new_direction == 'down':
-
-        if direction != 'up':
-            direction = new_direction
-
-
-# Collision check
-def check_collisions(snake):
-
-    x, y = snake.coordinates[0]
-
-    if x < 0 or x >= WIDTH:
-        return True
-
-    elif y < 0 or y >= HEIGHT:
-        return True
-
-    for body_part in snake.coordinates[1:]:
-
-        if x == body_part[0] and y == body_part[1]:
-            return True
-
-    return False
-
-
-# Game over
-def game_over():
-
-    canvas.delete(tk.ALL)
-
-    canvas.create_text(
-        canvas.winfo_width() / 2,
-        canvas.winfo_height() / 2 - 30,
-        font=('Arial', 40),
-        text="GAME OVER",
-        fill="red",
-        tag="gameover"
-    )
-
-    canvas.create_text(
-        canvas.winfo_width() / 2,
-        canvas.winfo_height() / 2 + 30,
-        font=('Arial', 20),
-        text=f"High Score: {high_score}",
-        fill="yellow"
-    )
-
-
-# Restart game
-def restart_game(event=None):
-
-    global score
-    global direction
-    global snake
-    global food
-
-    # Reset values
-    score = 0
-    direction = 'down'
-
-    label.config(
-        text=f"Score: 0    High Score: {high_score}"
-    )
-
-    # Clear canvas
-    canvas.delete(tk.ALL)
-
-    # Create new snake and food
-    snake = Snake()
-    food = Food()
-
-    # Start game again
-    next_turn(snake, food)
-
-
-# Keyboard controls
-window.bind(
-    '<Left>',
-    lambda event: change_direction('left')
-)
-
-window.bind(
-    '<Right>',
-    lambda event: change_direction('right')
-)
-
-window.bind(
-    '<Up>',
-    lambda event: change_direction('up')
-)
-
-window.bind(
-    '<Down>',
-    lambda event: change_direction('down')
-)
-
-# Restart key
-window.bind('r', restart_game)
-window.bind('R', restart_game)
-
-# Start game
 snake = Snake()
 food = Food()
 
 next_turn(snake, food)
-
 window.mainloop()
