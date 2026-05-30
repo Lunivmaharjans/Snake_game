@@ -9,15 +9,15 @@ HEIGHT = 400
 # ---------------- REWARDS ----------------
 
 REWARD_EAT = 10
-REWARD_STEP = -0.01
-PENALTY_WALL = -10
-PENALTY_SELF = -10
+REWARD_STEP = 0.1
+PENALTY_WALL = -100
+PENALTY_SELF = -100
 
 # ---------------- Q LEARNING ----------------
 
 ALPHA = 0.1
 GAMMA = 0.9
-EPSILON = 0.2
+EPSILON = 0.05
 
 ACTIONS = ["up", "down", "left", "right"]
 
@@ -36,17 +36,21 @@ def get_state(snake, food):
     head_x, head_y = snake.coordinates[0]
     food_x, food_y = food.coordinates
 
-    # ADD danger awareness (IMPORTANT FIX)
+    food_left = food_x < head_x
+    food_right = food_x > head_x
+    food_up = food_y < head_y
+    food_down = food_y > head_y
+
     danger_left = head_x - SPACE_SIZE < 0
     danger_right = head_x + SPACE_SIZE >= WIDTH
     danger_up = head_y - SPACE_SIZE < 0
     danger_down = head_y + SPACE_SIZE >= HEIGHT
 
     return (
-        head_x // SPACE_SIZE,
-        head_y // SPACE_SIZE,
-        food_x // SPACE_SIZE,
-        food_y // SPACE_SIZE,
+        food_left,
+        food_right,
+        food_up,
+        food_down,
         danger_left,
         danger_right,
         danger_up,

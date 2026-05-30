@@ -1,6 +1,8 @@
 import tkinter as tk
 import random
 import ai
+import numpy as np
+import matplotlib.pyplot as plt
 
 # ---------------- GAME SETTINGS ----------------
 
@@ -16,6 +18,7 @@ SPEED = 100
 score = 0
 last_direction = "right"
 high_score = 0
+reward_history = []
 
 # ---------------- WINDOW ----------------
 
@@ -86,12 +89,29 @@ def check_collisions(snake):
 
     return None
 
+plt.ion()
+
+fig, ax = plt.subplots(figsize=(8, 4))
+
+def update_graph():
+    ax.clear()
+
+    rewards = np.array(reward_history)
+
+    ax.plot(rewards)
+    ax.set_title("Snake AI Learning")
+    ax.set_xlabel("Events")
+    ax.set_ylabel("Reward")
+    ax.grid(True)
+
+    plt.draw()
+    plt.pause(0.01)
 
 # ---------------- GAME OVER ----------------
 
 def game_over():
     global snake, food, score
-
+    
     score = 0
     canvas.delete("all")
 
@@ -103,7 +123,7 @@ def game_over():
         font=("Arial", 30)
     )
 
-    window.after(1500, restart_game)
+    window.after(1000, restart_game)
 
 
 # ---------------- RESTART ----------------
@@ -168,7 +188,9 @@ def next_turn(snake, food):
     # ---------------- FOOD CHECK ----------------
     if x == food.coordinates[0] and y == food.coordinates[1]:
         score += 1
-        reward = ai.calculate_reward("eat")
+        reward = 10
+        reward_history.append(reward)
+        update_graph()
         print("Reward:", reward)
 
         if score > high_score:
@@ -192,18 +214,26 @@ def next_turn(snake, food):
     next_state = ai.get_state(snake, food)
 
     if collision:
-        reward = ai.calculate_reward(collision)
+        if collision == "wall":
+            reward = -10
+            update_graph()
+        elif collision == "self":
+            reward = -10
+            update_graph()
+        reward_history.append(reward)
         print("Reward:", reward)
 
         ai.update_q_table(state, direction, reward, next_state)
-        ai.save_qtable()
+        if collision:
+            ai.save_qtable()
 
         game_over()
         return
 
     else:
         ai.update_q_table(state, direction, reward, next_state)
-        ai.save_qtable()
+        if collision:
+            ai.save_qtable()
 
         window.after(SPEED, next_turn, snake, food)
 
